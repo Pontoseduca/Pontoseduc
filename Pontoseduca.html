@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cadastro de Alunos</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style type="text/css">
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #a094c4;
+      margin: 20px;
+    }
+    .container {
+      max-width: 700px;
+      margin: auto;
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    h1 {
+      text-align: center;
+      color: #3d348b;
+    }
+    label {
+      font-weight: bold;
+      margin-top: 10px;
+      display: block;
+    }
+    input, button, textarea, select {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #655aa8;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+      border: none;
+    }
+    button:hover {
+      background-color: #52468d;
+    }
+    .student-list {
+      margin-top: 20px;
+    }
+    .student-card {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 10px;
+      background: #f9f9f9;
+    }
+    .actions button {
+      width: auto;
+      margin-right: 5px;
+      padding: 5px;
+    }
+    .filter-section {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Cadastro de Alunos</h1>
+    <label for="studentName">Nome do Aluno:</label>
+    <input id="studentName" placeholder="Digite o nome do aluno" type="text" />
+    <button id="saveStudentBtn">Cadastrar Aluno</button>
+    <button id="exportExcelBtn">Exportar para Excel</button>
+
+    <div class="filter-section">
+      <h3>Filtrar Pontos por Período</h3>
+      <label for="startDate">Data Inicial:</label>
+      <input id="startDate" type="date" />
+      <label for="endDate">Data Final:</label>
+      <input id="endDate" type="date" />
+      <button id="filterPointsBtn">Filtrar</button>
+    </div>
+
+    <div class="student-list" id="studentList"></div>
+  </div>
+
+  <script>
+    let studentList = JSON.parse(sessionStorage.getItem('students')) || [];
+
+    function saveStudent() {
+      const studentName = document.getElementById('studentName').value.trim();
+      if (!studentName) {
+        alert("Por favor, insira o nome do aluno.");
+        return;
+      }
+
+      studentList.push({ name: studentName, positivos: [], negativos: [] });
+      sessionStorage.setItem('students', JSON.stringify(studentList));
+      document.getElementById('studentName').value = '';
+      renderStudents();
+    }
+
+    function renderStudents() {
+      const studentListDiv = document.getElementById('studentList');
+      studentListDiv.innerHTML = '';
+      studentList.forEach((student, index) => {
+        const studentCard = document.createElement('div');
+        studentCard.className = 'student-card';
+        studentCard.innerHTML = `
+          <p><strong>Nome:</strong> ${student.name}</p>
+          <p><strong>Pontos Positivos:</strong> ${student.positivos.length}</p>
+          <p><strong>Pontos Negativos:</strong> ${student.negativos.length}</p>
+          <div class="actions">
+            <button onclick="updatePoints(${index}, 'positivos')">+ Ponto Positivo</button>
+            <button onclick="updatePoints(${index}, 'negativos')">+ Ponto Negativo</button>
+          </div>
+        `;
+        studentListDiv.appendChild(studentCard);
+      });
+    }
+
+    function updatePoints(index, type) {
+      const now = new Date();
+      const formattedDate = now.toISOString().split("T")[0]; // Formato: YYYY-MM-DD
+      studentList[index][type].push(formattedDate);
+      sessionStorage.setItem('students', JSON.stringify(studentList));
+      renderStudents();
+    }
+
+    function filterPoints() {
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+
+      if (!startDate || !endDate) {
+        alert("Por favor, selecione as datas inicial e final.");
+        return;
+      }
+
+      const studentListDiv = document.getElementById('studentList');
+      studentListDiv.innerHTML = '';
+      studentList.forEach((student, index) => {
+        const filteredPositivos = student.positivos.filter(date => date >= startDate && date <= endDate);
+        const filteredNegativos = student.negativos.filter(date => date >= startDate && date <= endDate);
+
+        const studentCard = document.createElement('div');
+        studentCard.className = 'student-card';
+        studentCard.innerHTML = `
+          <p><strong>Nome:</strong> ${student.name}</p>
+          <p><strong>Pontos Positivos no Período:</strong> ${filteredPositivos.length}</p>
+          <p><strong>Pontos Negativos no Período:</strong> ${filteredNegativos.length}</p>
+        `;
+        studentListDiv.appendChild(studentCard);
+      });
+    }
+
+    function exportToExcel() {
+      const sheetData = [["Data", "Nome", "Positivos", "Negativos"]];
+      const summaryData = [["Nome", "Total Positivos", "Total Negativos"]];
+
+      studentList.forEach(student => {
+        const dailyPoints = {};
+
+        // Agrupar pontos por data
+        [...student.positivos, ...student.negativos].forEach(date => {
+          if (!dailyPoints[date]) dailyPoints[date] = { positivos: 0, negativos: 0 };
+        });
+
+        student.positivos.forEach(date => dailyPoints[date].positivos++);
+        student.negativos.forEach(date => dailyPoints[date].negativos++);
+
+        Object.keys(dailyPoints).forEach(date => {
+          sheetData.push([
+            date,
+            student.name,
+            dailyPoints[date].positivos,
+            dailyPoints[date].negativos
+          ]);
+        });
+
+        summaryData.push([student.name, student.positivos.length, student.negativos.length]);
+      });
+
+      const workbook = XLSX.utils.book_new();
+
+      // Planilha diária
+      const dailySheet = XLSX.utils.aoa_to_sheet(sheetData);
+      XLSX.utils.book_append_sheet(workbook, dailySheet, "Pontos Diários");
+
+      // Resumo por aluno
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Resumo");
+
+      XLSX.writeFile(workbook, "Alunos_Pontos_Agrupados.xlsx");
+    }
+
+    document.getElementById('saveStudentBtn').addEventListener('click', saveStudent);
+    document.getElementById('filterPointsBtn').addEventListener('click', filterPoints);
+    document.getElementById('exportExcelBtn').addEventListener('click', exportToExcel);
+
+    renderStudents();
+  </script>
+</body>
+</html>
